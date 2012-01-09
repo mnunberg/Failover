@@ -1,0 +1,80 @@
+=head1 NAME
+
+Failover::SPEC - Specification for simple failover protocol
+
+=head1 IDEAS AND DESIGN
+
+The basic motive for writing this was the lack of generic paxos 
+library implementations. It seems only Java has gotten this right.
+
+Considering my resistance to integrate yet another language into my
+project, and the fact that any other implementation would involve a
+significant amount of cruft, I've decided to implement a subset of a
+solution to the distributed failover problem.
+
+The main issue which i wrestled with was trying to have multiple
+hot standby nodes waiting to failover when a primary node died. This
+would need to be done with the nodes knowing only their peers, and
+specifically not having the requirement to communicate with an external
+synchronization server like a database or DNS.
+
+I didn't have a lot of 'dynamic pooling' or have any need for dynamic
+preferences in terms of which nodes were actually selected for active
+mode; thus this protocol assumes three things: (1): That the nodes are pre-set
+and do not change during execution (in other words, you cannot add nodes
+without restarting *all* processes); and (2): Nodes have a pre-set, hard
+coded and possibly arbitrary order which must be shared among all nodes;
+(3) Nodes are able to access other nodes. The network must allow for
+cross-communication between all related nodes.
+
+=head2 STATE
+
+Currently nodes can be in one of three states. States can either be shared,
+or can be private to the view of a single node.
+
+A node can be in a C<ACTIVE> state, which means that the node is the master.
+It can be in a C<STANDBY> state, in which case the node is alive and functional
+and is waiting for failover. It can be in a C<UNDEF> state, which means the
+node is in the process of determining its state, or is in middle of connecting.
+
+Finally, a node can be in a C<DOWN> state, which means the node is unreachable.
+
+=head2 TRANSITION, PROPOSITIONS AND OBJECTIONS
+
+The general flow of control assumes all nodes already connected, and all nodes
+behaving properly (no BFT).
+
+Nodes will try to elect themselves as Master based on the (1) the position they
+have in the chain, (2), the existence of other masters, and (3), the availability
+of other machines in the chain.
+
+Master selection only occurs during initial connection, or in the event when the
+current master dies. This can be represented in the following:
+
+    
+    [ A:UP B:UNDEF C:UNDEF ]
+
+C<A> is our node, and it is the highest in the chain. C<B> and C<C> are in an
+undefined state, and at a later point may come up. Since C<A> is the highest in
+the chain, it is the best current candidate for a master, and sends out a C<PROPOSAL>
+for it to become the master. It waits a given amount of time, and if there are
+no objections, it becomes a master and broadcasts this status to all the other
+nodes
+
+    [ A:DOWN B:UNDEF C:MASTER ]
+
+C<B> is our node right now. When it connects to the other nodes, it sees itself
+as being the highest machine in the chain and sends a proposal. (In truth, for
+each node connection, the 'existing' node responds with a status report, however
+for this example, let's pretend this doesn't happen).
+
+At this point, C<C>, being the current master, responds with an C<OBJECTION>
+to the proposal, because C<C> is already the master.
+
+During some point in the future, C<C> goes down, and C<A> goes up - C<B>
+still remains the master. Finally, C<B> goes down.
+
+At this stage, C<A> will send a C<PROPOSAL> and it will be accepted by
+C<B>.
+
+..
