@@ -8,6 +8,7 @@ our @EXPORT;
 my $Ug = Data::UUID->new();
 
 use Class::XSAccessor {
+    constructor => '_new',
     accessors => [qw(uuid flags)]
 };
 
@@ -32,9 +33,10 @@ sub new_client {
 
 sub new_with_uuid {
     my ($cls,$str_uuid) = @_;
-    bless my($o), $cls;
+    bless my $o = {}, $cls;
     $o->uuid($Ug->from_string($str_uuid));
     $o->flags(FO_IDf_PROVIDER|FO_IDf_CONFIRMED);
+    return $o;
 }
 
 sub is_confirmed {
@@ -49,7 +51,8 @@ sub encode_str {
 
 sub decode_str {
     my ($cls,$str) = @_;
-    bless my($o), $cls;
+    my $o = $cls->_new();
+    #bless my($o), $cls;
     my ($flag,$str_uuid) = split(/:/, $str);
     $o->uuid($Ug->from_string($str_uuid));
     $o->flags($flag);

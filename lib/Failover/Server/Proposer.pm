@@ -2,6 +2,8 @@ package Failover::Server::Proposer;
 use strict;
 use warnings;
 use Failover::Protocol;
+use Failover::Server::Events;
+
 use base qw(POE::Sugar::Attributes);
 use POE;
 use Log::Fu;
@@ -31,7 +33,7 @@ sub try_propose {
             log_debug(
                 "Still reachable: ",
                 map {
-                  sprintf("%s:%s", $_->id, foproto_strstate($_->state))
+                  sprintf("%s:%s", $_->infostring, foproto_strstate($_->state))
                   } @higher_candidates
                 );
         }
@@ -44,7 +46,7 @@ sub try_propose {
         }
         
         $self->proposal_timer(
-            $poe_kernel->delay_set('proposal_expiry', FOPROTO_PROPOSAL_EXPIRY,
+            $poe_kernel->delay_set(FO_EV_PROPOSAL_ALARM, FOPROTO_PROPOSAL_EXPIRY,
                                    $self)
         );
     } else {
@@ -60,10 +62,12 @@ sub try_proposal_objection {
     }
     
     if($can_respond) {
-        log_infof("Sending OBJECTION to proposal from peer %s", $proposer->id);
+        log_infof("Sending OBJECTION to proposal from peer %s",
+                  $proposer->infostring);
+        
         $proposer->sock->put($self->proto_propose_objection());
     } else {
-        log_info("Nothing to object to proposal from %s", $proposer->id);
+        log_infof("Nothing to object to proposal from %s", $proposer->infostring);
         $self->cancel_proposal();
     }
 }
@@ -76,7 +80,8 @@ sub cancel_proposal {
     }
 }
 
-sub proposal_expiry :Event {
+sub proposal_expiry :Event(FO_EV_PROPOSAL_ALARM)
+{
     my $self = $_[ARG0];
     #Nobody rejected our proposal. Assume master.
     log_err("Nobody has responed to our proposal yet. Setting ourselves to master");

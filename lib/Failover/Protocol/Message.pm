@@ -1,6 +1,8 @@
 package Failover::Protocol::Message;
 use strict;
 use warnings;
+use Failover::Protocol::ID;
+
 use JSON::XS;
 use Log::Fu;
 
@@ -26,6 +28,11 @@ sub decode_hash {
     while (my ($field,$acc) = each %ACC_PROTOMAP) {
         $o->$acc($hash->{$field});
     }
+    
+    if($o->ident) {
+        $o->ident(Failover::Protocol::ID->decode_str($o->ident));
+    }
+    
     return $o;
 }
 
